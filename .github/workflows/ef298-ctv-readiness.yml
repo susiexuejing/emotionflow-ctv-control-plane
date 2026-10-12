@@ -1,0 +1,142 @@
+name: EF-298 controlled readiness validation
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ef-298-ctv-readiness-v1
+  cancel-in-progress: false
+
+jobs:
+  readiness:
+    name: Invoke fixed readiness command once
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ctv-dev-controlled
+    permissions:
+      id-token: write
+    steps:
+      - name: Mask fixed identifiers in subsequent logs
+        shell: bash
+        env:
+          ALIYUN_ACCOUNT_ID: ${{ vars.ALIYUN_ACCOUNT_ID }}
+          ECS_REGION_ID: ${{ vars.ECS_REGION_ID }}
+          ECS_INSTANCE_ID: ${{ vars.ECS_INSTANCE_ID }}
+          ECS_COMMAND_ID: ${{ vars.ECS_COMMAND_ID }}
+        run: |
+          set -euo pipefail
+          for value in "$ALIYUN_ACCOUNT_ID" "$ECS_REGION_ID" "$ECS_INSTANCE_ID" "$ECS_COMMAND_ID"; do
+            printf '::add-mask::%s\n' "$value"
+          done
+
+      - name: Assume only the EF-298 RAM role
+        uses: aliyun/configure-aliyun-credentials-action@1e5248c8d5d93a8781ac344a68e19a43341e79e6
+        with:
+          role-to-assume: acs:ram::${{ vars.ALIYUN_ACCOUNT_ID }}:role/EmotionFlowEF298CTVInvoker
+          oidc-provider-arn: acs:ram::${{ vars.ALIYUN_ACCOUNT_ID }}:oidc-provider/EmotionFlowGitHubOIDC
+          role-session-name: ef298-readiness-${{ github.run_id }}
+          role-session-expiration: 900
+          audience: sts.aliyuncs.com
+
+      - name: Install pinned Alibaba CLI
+        uses: aliyun/setup-aliyun-cli-action@09a5f86915bb556e27bf050e9a5e339aeb073df5
+        with:
+          version: 3.5.1
+
+      - name: Invoke and validate the fixed command
+        shell: bash
+        env:
+          REGION_ID: ${{ vars.ECS_REGION_ID }}
+          INSTANCE_ID: ${{ vars.ECS_INSTANCE_ID }}
+          COMMAND_ID: ${{ vars.ECS_COMMAND_ID }}
+        run: |
+          set -euo pipefail
+
+          if ! invoke_json="$(
+            aliyun ecs InvokeCommand \
+              --RegionId "$REGION_ID" \
+              --InstanceId.1 "$INSTANCE_ID" \
+              --CommandId "$COMMAND_ID" \
+              --Timed false \
+              --output json 2>/dev/null
+          )"; then
+            echo "EF-298 receipt: invocation submission failed."
+            exit 1
+          fi
+
+          if ! invoke_id="$(python3 -c '
+          import json, re, sys
+          value = json.load(sys.stdin).get("InvokeId", "")
+          if not isinstance(value, str) or not re.fullmatch(r"t-[A-Za-z0-9-]+", value):
+              raise SystemExit(1)
+          print(value)
+          ' <<<"$invoke_json")"; then
+            echo "EF-298 receipt: invocation identifier was invalid."
+            exit 1
+          fi
+
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if ! result_json="$(
+              aliyun ecs DescribeInvocationResults \
+                --RegionId "$REGION_ID" \
+                --InvokeId "$invoke_id" \
+                --InstanceId "$INSTANCE_ID" \
+                --CommandId "$COMMAND_ID" \
+                --ContentEncoding PlainText \
+                --output json 2>/dev/null
+            )"; then
+              echo "EF-298 receipt: result query failed."
+              exit 1
+            fi
+
+            set +e
+            receipt="$(RESULT_JSON="$result_json" python3 - <<'PY'
+          import json, os, re, sys
+
+          data = json.loads(os.environ["RESULT_JSON"])
+          records = data.get("Invocation", {}).get("InvocationResults", {}).get("InvocationResult", [])
+          if not isinstance(records, list) or len(records) != 1:
+              raise SystemExit(2)
+          record = records[0]
+          status = record.get("InvocationStatus")
+          if status in {"Pending", "Running", "Scheduled", "Stopping"}:
+              raise SystemExit(10)
+          if status not in {"Success", "Finished"} or str(record.get("ExitCode")) != "0":
+              raise SystemExit(3)
+          output = record.get("Output")
+          if not isinstance(output, str):
+              raise SystemExit(4)
+
+          fields = {}
+          for line in output.splitlines():
+              line = line.strip()
+              if not line:
+                  continue
+              match = re.fullmatch(r"(E[1-8])(?:=|:)[ \t]*([A-Za-z0-9._:-]{1,80})", line)
+              if not match or match.group(1) in fields:
+                  raise SystemExit(5)
+              fields[match.group(1)] = match.group(2)
+          if set(fields) != {f"E{i}" for i in range(1, 9)}:
+              raise SystemExit(6)
+          for index in range(1, 9):
+              print(f"E{index}={fields[f'E{index}']}")
+          PY
+            )"
+            parse_status=$?
+            set -e
+
+            if [ "$parse_status" -eq 0 ]; then
+              printf '%s\n' "$receipt"
+              exit 0
+            fi
+            if [ "$parse_status" -ne 10 ]; then
+              echo "EF-298 receipt: evidence validation failed."
+              exit 1
+            fi
+            sleep 5
+          done
+
+          echo "EF-298 receipt: timed out waiting for the fixed command."
+          exit 1
