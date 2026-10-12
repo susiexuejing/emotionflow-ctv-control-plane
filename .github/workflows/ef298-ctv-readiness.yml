@@ -85,8 +85,12 @@ jobs:
                 --InstanceId "$INSTANCE_ID" \
                 --CommandId "$COMMAND_ID" \
                 --ContentEncoding PlainText \
-                --output json 2>/dev/null
+                --output json 2>&1
             )"; then
+              if [[ "$result_json" == *"ServiceUnavailable"* || "$result_json" == *"InternalError.Dispatch"* ]]; then
+                sleep 5
+                continue
+              fi
               echo "EF-298 receipt: result query failed."
               exit 1
             fi
