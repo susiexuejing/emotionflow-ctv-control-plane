@@ -49,7 +49,7 @@ jobs:
         shell: bash
         env:
           REGION_ID: ${{ vars.ECS_REGION_ID }}
-          INSTANCE_ID: ${{ vas.ECS_INSTANCE_ID }}
+          INSTANCE_ID: ${{ vars.ECS_INSTANCE_ID }}
           COMMAND_ID: ${{ vars.ECS_COMMAND_ID }}
         run: |
           set -euo pipefail
@@ -84,7 +84,7 @@ jobs:
                 echo "EF-298 receipt: invocation submission rejected (control-plane)."
                 ;;
               *)
-                if printf '%s\n' "$invoke_json" | grep -Eq '^ErrorCode:[[:space:]]*[[A-Za-z0-9._-]{1,80}[[:space:]]*$'; then
+                if printf '%s\n' "$invoke_json" | grep -Eq '^ErrorCode:[[:space:]]*[A-Za-z0-9._-]{1,80}[[:space:]]*$'; then
                   response_shape=api
                 else
                   response_shape=cli-or-transport
