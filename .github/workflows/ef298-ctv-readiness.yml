@@ -68,7 +68,7 @@ jobs:
 
           if [ "$invoke_status" -ne 0 ]; then
             case "$invoke_json" in
-              *"Forbidden"*|*"NoPermission"*|*"Unauthorized"*|*"InvalidAccessKeyId"*)
+              *"Forbidden"*|*"NoPermission"*|*"Unauthorized"*|*"InvalidAccessKeyId"*|*"AccessDenied"*|*"OperationDenied"*)
                 echo "EF-298 receipt: invocation submission rejected (authorization)."
                 ;;
               *"InvalidCommand"*|*"InvalidInstanceId"*|*"NotFound"*)
@@ -80,8 +80,16 @@ jobs:
               *"ServiceUnavailable"*|*"InternalError"*)
                 echo "EF-298 receipt: invocation submission rejected (transient)."
                 ;;
+              *"Unsupported"*|*"NotSupport"*|*"InvalidAction"*|)
+                echo "EF-298 receipt: invocation submission rejected (control-plane)."
+                ;;
               *)
-                echo "EF-298 receipt: invocation submission rejected (unclassified)."
+                if printf '%s\n' "$invoke_json" | grep -Eq '^ErrorCode:[[:space:]]*[A-Za-z0-9._-]{1,80}[[:space:]]*$'; then
+                  response_shape=api
+                else
+                  response_shape=cli-or-transport
+                fi
+                echo "EF-298 receipt: invocation submission rejected (unclassified-${response_shape})."
                 ;;
             esac
             exit 1
