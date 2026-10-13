@@ -68,7 +68,7 @@ jobs:
 
           if [ "$invoke_status" -ne 0 ]; then
             case "$invoke_json" in
-              *"Forbidden"*|*"NoPermission"*|*"Unauthorized"*|*"InvalidAccessKeyId"*)
+              *"Forbidden"*|*"NoPermission"*|*"Unauthorized"*|*"InvalidAccessKeyId"*|*"AccessDenied"*|*"OperationDenied"*)
                 echo "EF-298 receipt: invocation submission rejected (authorization)."
                 ;;
               *"InvalidCommand"*|*"InvalidInstanceId"*|*"NotFound"*)
@@ -80,8 +80,23 @@ jobs:
               *"ServiceUnavailable"*|*"InternalError"*)
                 echo "EF-298 receipt: invocation submission rejected (transient)."
                 ;;
+              *"Unsupported"*|*"NotSupport"*|*"InvalidAction"*)
+                echo "EF-298 receipt: invocation submission rejected (control-plane)."
+                ;;
               *)
-                echo "EF-298 receipt: invocation submission rejected (unclassified)."
+                response_shape="$(INVOCATION_RESPONSE="$invoke_json" python3 - <<'PY'
+          import json, os, re
+
+          try:
+              response = json.loads(os.environ["INVOCATION_RESPONSE"])
+          except (json.JSONDecodeError, TypeError):
+              print("cli-or-transport")
+          else:
+              code = response.get("Code") if isinstance(response, dict) else None
+              print("api" if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9._-]{1,80}", code) else "unknown")
+          PY
+                )"
+                echo "EF-298 receipt: invocation submission rejected (unclassified-${response_shape})."
                 ;;
             esac
             exit 1
