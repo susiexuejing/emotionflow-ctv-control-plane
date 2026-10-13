@@ -54,15 +54,36 @@ jobs:
         run: |
           set -euo pipefail
 
-          if ! invoke_json="$(
+          set +e
+          invoke_json="$(
             aliyun ecs InvokeCommand \
               --RegionId "$REGION_ID" \
               --InstanceId.1 "$INSTANCE_ID" \
               --CommandId "$COMMAND_ID" \
               --Timed false \
-              --output json 2>/dev/null
-          )"; then
-            echo "EF-298 receipt: invocation submission failed."
+              --output json 2>&1
+          )"
+          invoke_status=$?
+          set -e
+
+          if [ "$invoke_status" -ne 0 ]; then
+            case "$invoke_json" in
+              *"Forbidden"*|*"NoPermission"*|*"Unauthorized"*|*"InvalidAccessKeyId"*)
+                echo "EF-298 receipt: invocation submission rejected (authorization)."
+                ;;
+              *"InvalidCommand"*|*"InvalidInstanceId"*|*"NotFound"*)
+                echo "EF-298 receipt: invocation submission rejected (target)."
+                ;;
+              *"InvalidParameter"*|*"MissingParameter"*)
+                echo "EF-298 receipt: invocation submission rejected (request)."
+                ;;
+              *"ServiceUnavailable"*|*"InternalError"*)
+                echo "EF-298 receipt: invocation submission rejected (transient)."
+                ;;
+              *)
+                echo "EF-298 receipt: invocation submission rejected (unclassified)."
+                ;;
+            esac
             exit 1
           fi
 
@@ -84,8 +105,8 @@ jobs:
                 --InvokeId "$invoke_id" \
                 --InstanceId "$INSTANCE_ID" \
                 --CommandId "$COMMAND_ID" \
-                --ContentEncoding PlainText \
-                --output json 2>&1
+                 --ContentEncoding PlainText \
+               --output json 2>&1
             )"; then
               if [[ "$result_json" == *"ServiceUnavailable"* || "$result_json" == *"InternalError.Dispatch"* ]]; then
                 sleep 5
