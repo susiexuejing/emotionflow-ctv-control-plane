@@ -68,7 +68,7 @@ jobs:
 
           if [ "$invoke_status" -ne 0 ]; then
             case "$invoke_json" in
-              *"Forbidden"*|*"NoPermission"*|*"Unauthorized"*)
+              *"Forbidden"*|*"NoPermission"*|*"Unauthorized"*|*"InvalidAccessKeyId"*)
                 echo "EF-298 receipt: invocation submission rejected (authorization)."
                 ;;
               *"InvalidCommand"*|*"InvalidInstanceId"*|*"NotFound"*)
