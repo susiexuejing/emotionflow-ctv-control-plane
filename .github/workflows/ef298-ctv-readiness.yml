@@ -49,7 +49,7 @@ jobs:
         shell: bash
         env:
           REGION_ID: ${{ vars.ECS_REGION_ID }}
-          INSTANCE_ID: ${{ vars.ECS_INSTANCE_ID }}
+          INSTANCE_ID: ${{ vas.ECS_INSTANCE_ID }}
           COMMAND_ID: ${{ vars.ECS_COMMAND_ID }}
         run: |
           set -euo pipefail
@@ -80,22 +80,15 @@ jobs:
               *"ServiceUnavailable"*|*"InternalError"*)
                 echo "EF-298 receipt: invocation submission rejected (transient)."
                 ;;
-              *"Unsupported"*|*"NotSupport"*|*"InvalidAction"*)
+              *"Unsupported"*|*"NotSupport"*|*"InvalidAction"*|)
                 echo "EF-298 receipt: invocation submission rejected (control-plane)."
                 ;;
               *)
-                response_shape="$(INVOCATION_RESPONSE="$invoke_json" python3 - <<'PY'
-          import json, os, re
-
-          try:
-              response = json.loads(os.environ["INVOCATION_RESPONSE"])
-          except (json.JSONDecodeError, TypeError):
-              print("cli-or-transport")
-          else:
-              code = response.get("Code") if isinstance(response, dict) else None
-              print("api" if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9._-]{1,80}", code) else "unknown")
-          PY
-                )"
+                if printf '%s\n' "$invoke_json" | grep -Eq '^ErrorCode:[[:space:]]*[[A-Za-z0-9._-]{1,80}[[:space:]]*$'; then
+                  response_shape=api
+                else
+                  response_shape=cli-or-transport
+                fi
                 echo "EF-298 receipt: invocation submission rejected (unclassified-${response_shape})."
                 ;;
             esac
