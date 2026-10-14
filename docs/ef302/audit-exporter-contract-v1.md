@@ -1,6 +1,6 @@
-# EF-302 Controlled Sanitized Audit Exporter — Contract v1
+# EF-302 Controlled Sanitized Audit Exporter — Contract v1.1
 
-**Status:** review-required; not deployable until an independent approval is recorded.
+**Status:** review-required and fail-closed. No cloud identity, policy, query, or audit run is permitted until an independent approval is recorded for this exact commit.
 
 ## Immutable audit scope
 
@@ -13,26 +13,29 @@
 
 The sealed selector is intentionally **not** stored in this public repository. At deployment, the operator must attest that it resolves to exactly the CEO-approved DEV instance and role. Its digest is recorded only in the sanitized attestation.
 
-## Fixed read-only queries
+## Evidence acquisition rule
 
-1. ActionTrail: fixed time-window lookup for OIDC role assumption and Cloud Assistant/ECS control-plane events related to the approved role/session.
-2. ECS Cloud Assistant: invocation and invocation-result metadata correlated to the sealed target only.
-3. Model Studio: native audit metadata for the same time window only; no inference log access.
-4. Billing: Model Studio charge-presence summary for the same window only.
+This contract does **not** authorize direct provider APIs that can return raw events, command content, command output, prompts, responses, or billing line items.
 
-The implementation must reject caller-supplied filters, regions, resources, command IDs, time windows, or output formats.
+A source can be queried only after a provider-side or separately approved redacting mechanism proves that the audit identity can receive *only* the schema-whitelisted fields. Until that proof exists for a source, the exporter must record `coverage=unavailable`, `outcome=unknown`, make no source query, and keep the overall conclusion `unknown`.
 
-## Prohibited operations
+No caller-supplied filters, regions, resources, command IDs, time windows, or output formats are accepted.
 
-No `RunCommand`, command creation/modification, dispatch, retry, Cloud Shell, terminal, file transfer, role assumption beyond this audit identity, policy/configuration changes, token issuance, or outbound network access.
+## Network rule
 
-It must not read secrets, instance metadata, host credentials, product data, databases, user data, prompts, responses, raw command content, raw command output, inference logs, or billing line items.
+Arbitrary internet egress is prohibited. A future approved redacting mechanism may use only the fixed Alibaba Cloud service endpoint(s) required for the fixed audit window and allowlist; it may not contact any other destination. This contract itself grants no endpoint access.
+
+## Prohibited operations and data
+
+No `RunCommand`, command creation/modification, dispatch, retry, Cloud Shell, terminal, file transfer, role assumption beyond the audit trust path, policy/configuration changes, token issuance, or workflow execution.
+
+It must not read secrets, instance metadata, host credentials, product data, databases, user data, raw provider events, command content, command output, prompts, responses, inference logs, or billing line items.
 
 EF-301 remains blocked. EF-297, CTV execution, BaiLian/model invocation, and `ef235_identity_write_probe_v1` remain prohibited.
 
 ## Data handling
 
-Raw provider records may be processed only in volatile memory inside the audit exporter to derive the output whitelist. They must not be written to logs, artifacts, GitHub, CTO Platform, Jira, Confluence, or the audit report. The process must emit exactly one sanitized attestation and then terminate.
+Only the schema-defined sanitized attestation may enter CTO Platform, GitHub, Jira, Confluence, or the audit report. No raw provider record may be logged, persisted, exported, or attached.
 
 A deployment is invalid unless it records:
 - immutable source commit SHA;
@@ -40,4 +43,5 @@ A deployment is invalid unless it records:
 - approved policy-diff digest;
 - output-whitelist digest;
 - sealed-selector attestation;
+- provider-side redaction proof for every queried source;
 - identity disablement confirmation after the single run.
