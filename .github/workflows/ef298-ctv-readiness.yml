@@ -80,7 +80,7 @@ jobs:
               *"ServiceUnavailable"*|*"InternalError"*)
                 echo "EF-298 receipt: invocation submission rejected (transient)."
                 ;;
-              *"Unsupported"*|*"NotSupport"*|*"InvalidAction"*|)
+              *"Unsupported"*|*"NotSupport"*|*"InvalidAction"*)
                 echo "EF-298 receipt: invocation submission rejected (control-plane)."
                 ;;
               *)
