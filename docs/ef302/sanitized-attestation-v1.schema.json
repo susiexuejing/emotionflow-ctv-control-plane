@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "EF-302 Sanitized Audit Attestation v1",
+  "title": "EF-302 Sanitized Audit Attestation v1.1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -49,8 +49,48 @@
       "type": "string",
       "enum": ["no-evidence-found", "evidence-found", "unknown"]
     },
-    "identity_disabled": { "type": "boolean" }
+    "identity_disabled": { "const": true }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "conclusion": { "const": "no-evidence-found" } },
+        "required": ["conclusion"]
+      },
+      "then": {
+        "properties": {
+          "sources": {
+            "properties": {
+              "sts": { "$ref": "#/$defs/completeAbsent" },
+              "ecs_command": { "$ref": "#/$defs/completeAbsent" },
+              "target_instance": { "$ref": "#/$defs/completeAbsent" },
+              "model_studio": { "$ref": "#/$defs/completeAbsent" },
+              "billing": { "$ref": "#/$defs/completeAbsent" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "conclusion": { "const": "evidence-found" } },
+        "required": ["conclusion"]
+      },
+      "then": {
+        "properties": {
+          "sources": {
+            "anyOf": [
+              { "properties": { "sts": { "$ref": "#/$defs/completePresent" } } },
+              { "properties": { "ecs_command": { "$ref": "#/$defs/completePresent" } } },
+              { "properties": { "target_instance": { "$ref": "#/$defs/completePresent" } } },
+              { "properties": { "model_studio": { "$ref": "#/$defs/completePresent" } } },
+              { "properties": { "billing": { "$ref": "#/$defs/completePresent" } } }
+            ]
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "source": {
       "type": "object",
@@ -66,6 +106,28 @@
           "enum": ["present", "absent", "unknown"]
         }
       }
+    },
+    "completeAbsent": {
+      "allOf": [
+        { "$ref": "#/$defs/source" },
+        {
+          "properties": {
+            "coverage": { "const": "complete" },
+            "outcome": { "const": "absent" }
+          }
+        }
+      ]
+    },
+    "completePresent": {
+      "allOf": [
+        { "$ref": "#/$defs/source" },
+        {
+          "properties": {
+            "coverage": { "const": "complete" },
+            "outcome": { "const": "present" }
+          }
+        }
+      ]
     }
   }
 }
