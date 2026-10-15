@@ -1,4 +1,4 @@
-# EF-302 Provider-Side Sanitized Audit — Contract v1.2
+# EF-302 Provider-Side Sanitized Audit — Contract v1.3
 
 **Status:** implementation-authorized by CEO; still fail-closed. This contract authorizes only the EF-302 historical audit.
 
@@ -22,6 +22,18 @@ The Function Compute runtime must have:
 - no access key, secret input, instance metadata, or user/product data.
 
 If a private endpoint path or source-specific permission cannot be proven before deployment, that source is not queried and reports `coverage=unavailable`, `outcome=unknown`.
+
+## Sealed adapter and proof boundary
+
+The sanitizer accepts no callbacks, free-form selectors, or caller-provided record filters. A sealed in-process adapter may pass only minimal normalized records and an `ef302-scope-proof-v1` proof. For each enabled source that proof must bind:
+- the fixed window and region;
+- the sealed role, instance, and old-run selectors;
+- the event-allowlist digest;
+- provider-side filtering, complete collection, exhausted pagination, and parse success.
+
+Any absent, malformed, or mismatched proof yields `coverage=unknown`; it must never yield `absent` or `complete`. Raw provider objects are discarded before the sanitizer core receives normalized records.
+
+The finalizer may create an attestation only after an `ef302-teardown-proof-v1` control-plane proof confirms both runtime-identity disablement and function disablement/deletion. Without that proof it emits no attestation and the audit remains `unknown`.
 
 ## Sources and output
 
@@ -49,9 +61,10 @@ A run is valid only when it binds:
 - independent review record for that SHA;
 - approved runtime-policy digest;
 - output-whitelist digest;
-- sealed-selector attestation;
+- sealed-selector and event-allowlist proof;
+- complete-collection and parse-success proof for every enabled source;
 - private-path and logging-disabled proof;
 - single-run record;
-- identity disablement confirmation.
+- control-plane-confirmed identity and function disablement.
 
 Any missing proof means no query and an overall `unknown` conclusion.
