@@ -1,9 +1,12 @@
 import { buildSanitizedSources } from "./sanitized-attestation-core.mjs";
 
-const REQUIRED_SOURCES = Object.freeze([
+const ADAPTER_SOURCES = Object.freeze([
   "sts",
   "ecs_command",
-  "target_instance",
+  "target_instance"
+]);
+
+const FIXED_UNAVAILABLE_SOURCES = Object.freeze([
   "model_studio",
   "billing"
 ]);
@@ -15,16 +18,23 @@ const ALLOWED_RECORD_KEYS = Object.freeze([
   "lifecycle_status"
 ]);
 
+function assertObservedAt(observedAt) {
+  if (typeof observedAt !== "string" || !Number.isFinite(Date.parse(observedAt))) {
+    throw new Error("EF-302 fail-closed: observed_at is required");
+  }
+  return observedAt;
+}
+
 function assertAdapterSet(adapters) {
   if (!adapters || typeof adapters !== "object") {
     throw new Error("EF-302 fail-closed: adapters are required");
   }
   const keys = Object.keys(adapters).sort();
-  const expected = [...REQUIRED_SOURCES].sort();
+  const expected = [...ADAPTER_SOURCES].sort();
   if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
     throw new Error("EF-302 fail-closed: adapter set mismatch");
   }
-  for (const name of REQUIRED_SOURCES) {
+  for (const name of ADAPTER_SOURCES) {
     if (typeof adapters[name] !== "function") {
       throw new Error(`EF-302 fail-closed: invalid adapter ${name}`);
     }
@@ -38,20 +48,29 @@ function reducedRecord(candidate) {
   return result;
 }
 
+function permanentlyUnavailableRecord() {
+  return Object.freeze({
+    coverage: "unavailable",
+    outcome: "unknown",
+    aggregate_count: 0,
+    lifecycle_status: "unknown"
+  });
+}
+
 /**
- * The private artifact supplies one fixed source adapter per approved source.
- * This core deliberately accepts no selector, request, command, identity,
- * network, credential, account, instance, or retry configuration.
- *
- * An adapter may examine provider-native data only inside the provider boundary.
- * This function keeps only the four whitelisted aggregate fields and does not
- * log, return, cache, or forward adapter-native material.
+ * The private artifact supplies only the three permitted fixed source adapters.
+ * Model Studio and billing are permanently unavailable: this core never invokes
+ * an adapter for either source. It accepts no selector, request, command,
+ * identity, network, credential, account, instance, or retry configuration.
  */
 export async function collectSealedProviderEvidence(adapters, { observedAt } = {}) {
+  const timestamp = assertObservedAt(observedAt);
   assertAdapterSet(adapters);
-  const reduced = {};
+  const reduced = Object.fromEntries(
+    FIXED_UNAVAILABLE_SOURCES.map((name) => [name, permanentlyUnavailableRecord()])
+  );
 
-  for (const name of REQUIRED_SOURCES) {
+  for (const name of ADAPTER_SOURCES) {
     try {
       reduced[name] = reducedRecord(await adapters[name]());
     } catch {
@@ -59,5 +78,5 @@ export async function collectSealedProviderEvidence(adapters, { observedAt } = {
     }
   }
 
-  return buildSanitizedSources(reduced, observedAt);
+  return buildSanitizedSources(reduced, timestamp);
 }
