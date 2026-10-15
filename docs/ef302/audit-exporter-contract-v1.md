@@ -1,20 +1,31 @@
-# EF-302 Provider-Side Sanitized Audit — Contract v1.3
+# EF-302 Provider-Side Sanitized Audit — Contract v1.4
 
-**Status:** implementation-authorized by CEO; still fail-closed. This contract authorizes only the EF-302 historical audit.
+**Status:** CEO authorized the provider-side audit design. The current public source is an independently reviewed **non-executable fail-closed baseline**. It authorizes neither cloud resource creation nor audit invocation.
 
 ## Immutable scope
 
 - Audit window: `2026-10-13T03:30:00Z` to `2026-10-13T04:45:00Z`.
 - Region: `cn-wulanchabu`.
 - Subject: the pre-existing EF-298 CTV invoker role, its temporary sessions, the approved DEV instance, and the old run correlation only.
-- Runtime: one non-interactive provider-side sanitizer, maximum session/runtime **15 minutes**, one governed invocation, then immediate disablement.
+- A future runtime: one non-interactive provider-side sanitizer, maximum session/runtime **15 minutes**, one governed invocation, then immediate disablement.
 - The sealed target selector and actual cloud identifiers are deployment-only and must not enter this repository, logs, or attestations.
 
-## Provider-side boundary
+## Current fail-closed baseline
 
-A dedicated Function Compute sanitizer may read provider responses **only in transient Alibaba Cloud process memory**. It is the sole component permitted to see raw provider records. It must never persist, emit, log, cache, upload, or transmit them outside the Alibaba Cloud controlled boundary.
+This revision contains neither:
+1. a sealed runtime manifest adapter that binds the role, instance, old run, region, window, and event-allowlist digests to the deployed package;
+2. a complete-collection adapter that proves fixed provider filters, parse success, response continuity, and exhausted pagination; nor
+3. a control-plane teardown adapter that verifies function and runtime-identity disablement/deletion.
 
-The Function Compute runtime must have:
+Therefore it has no collector, no deployable function handler, and no permitted runtime role. It can only produce `unknown`; it cannot emit `present`, `absent`, `complete`, or `identity_disabled=true`.
+
+A later executable implementation requires a new immutable source/artifact digest and a fresh independent review. It must pass all completion gates below before any cloud resource is created.
+
+## Future provider-side boundary
+
+A future dedicated Function Compute sanitizer may read provider responses **only in transient Alibaba Cloud process memory**. It is the sole component permitted to see raw provider records. It must never persist, emit, log, cache, upload, or transmit them outside the Alibaba Cloud controlled boundary.
+
+The future runtime must have:
 - Simple Log Service logging disabled;
 - no HTTP/public trigger, no event trigger, no retry, no Runner, and no caller-supplied input;
 - public Internet disabled; private service access only after a deployment preflight proves the required existing private endpoint path;
@@ -23,30 +34,18 @@ The Function Compute runtime must have:
 
 If a private endpoint path or source-specific permission cannot be proven before deployment, that source is not queried and reports `coverage=unavailable`, `outcome=unknown`.
 
-## Sealed adapter and proof boundary
-
-The sanitizer accepts no callbacks, free-form selectors, or caller-provided record filters. A sealed in-process adapter may pass only minimal normalized records and an `ef302-scope-proof-v1` proof. For each enabled source that proof must bind:
-- the fixed window and region;
-- the sealed role, instance, and old-run selectors;
-- the event-allowlist digest;
-- provider-side filtering, complete collection, exhausted pagination, and parse success.
-
-Any absent, malformed, or mismatched proof yields `coverage=unknown`; it must never yield `absent` or `complete`. Raw provider objects are discarded before the sanitizer core receives normalized records.
-
-The finalizer may create an attestation only after an `ef302-teardown-proof-v1` control-plane proof confirms both runtime-identity disablement and function disablement/deletion. Without that proof it emits no attestation and the audit remains `unknown`.
-
 ## Sources and output
 
-The sanitizer may emit only the fields defined in `sanitized-attestation-v1.schema.json`:
+Only the fixed fields in `sanitized-attestation-v1.schema.json` may leave the provider boundary:
 - `present / absent / unknown`;
 - aggregate count;
 - lifecycle status;
 - observed time;
 - audit coverage status.
 
-It may not emit command content, instance details, raw output, API key, request ID, Prompt, Response, raw event, bill line, workspace, model, or user/product data.
+The output may not contain command content, instance details, raw output, API key, request ID, Prompt, Response, raw event, bill line, workspace, model, user/product data, or an unsupported claim of disablement.
 
-A source is enabled only when its adapter and redaction proof are listed in `provider-side-redaction-mechanism-v1.md`. Unsupported Model Studio audit-log or billing access remains `unknown`; it must not be replaced by console scraping, inference-log delivery, SLS, OSS, browser automation, or a broader read policy.
+Model Studio audit-log and billing access remain permanently `unavailable/unknown` under this authorization. They must not be replaced by console scraping, inference-log delivery, SLS, OSS, browser automation, or a broader read policy.
 
 ## Non-negotiable exclusions
 
@@ -54,17 +53,16 @@ No command execution, dispatch, retry, workflow run, OIDC issuance, BaiLian/mode
 
 EF-301 remains Blocked. EF-297 remains prohibited.
 
-## Completion gate
+## Future completion gate
 
-A run is valid only when it binds:
-- immutable source commit SHA;
-- independent review record for that SHA;
-- approved runtime-policy digest;
-- output-whitelist digest;
-- sealed-selector and event-allowlist proof;
-- complete-collection and parse-success proof for every enabled source;
+A later executable run is valid only when it binds:
+- immutable source and artifact digests;
+- independent review record for those digests;
+- sealed-selector and event-allowlist adapter;
+- complete-collection adapter for every enabled source;
+- approved runtime-policy and output-whitelist digests;
 - private-path and logging-disabled proof;
 - single-run record;
-- control-plane-confirmed identity and function disablement.
+- control-plane-confirmed function and identity disablement.
 
-Any missing proof means no query and an overall `unknown` conclusion.
+Any missing proof means no deployment, no query, and an overall `unknown` conclusion.
