@@ -18,6 +18,32 @@ const REQUIRED_DIGESTS = Object.freeze([
   "logging_disabled_proof_sha256"
 ]);
 
+const ALLOWED_ENVELOPE_KEYS = Object.freeze([
+  "source_commit_sha",
+  ...REQUIRED_DIGESTS,
+  "max_runtime_minutes",
+  "invocation_limit",
+  "retry_count",
+  "trigger_count",
+  "public_internet_enabled",
+  "logging_enabled",
+  "http_trigger_enabled",
+  "event_trigger_enabled",
+  "async_enabled",
+  "raw_output_enabled",
+  "product_access_enabled",
+  "database_access_enabled",
+  "secret_access_enabled"
+]);
+
+function assertNoUnexpectedFields(envelope) {
+  for (const key of Object.keys(envelope)) {
+    if (!ALLOWED_ENVELOPE_KEYS.includes(key)) {
+      throw new Error(`EF-302 fail-closed: unregistered field ${key}`);
+    }
+  }
+}
+
 function requireExact(value, expected, label) {
   if (value !== expected) throw new Error(`EF-302 fail-closed: ${label}`);
 }
@@ -42,7 +68,7 @@ export function assertSealedDeploymentEnvelope(envelope, { sourceCommitSha }) {
     throw new Error("EF-302 fail-closed: invalid provenance");
   }
 
-  requireExact(envelope.source_commit_sha, sourceCommitSha, "source commit mismatch");
+  assertNoUnexpectedFields(envelope);\n  requireExact(envelope.source_commit_sha, sourceCommitSha, "source commit mismatch");
   for (const key of REQUIRED_DIGESTS) requireDigest(envelope[key], key);
 
   requireExact(envelope.max_runtime_minutes, EF302_RUNTIME_LIMITS.maxRuntimeMinutes, "runtime limit");
