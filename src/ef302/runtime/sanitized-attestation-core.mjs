@@ -28,6 +28,13 @@ function nonNegativeInteger(value) {
   return Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
+function requireObservedAt(observedAt) {
+  if (typeof observedAt !== "string" || !Number.isFinite(Date.parse(observedAt))) {
+    throw new Error("EF-302 fail-closed: observed_at is required");
+  }
+  return observedAt;
+}
+
 function normalizedSource(record, observedAt) {
   const source = record && typeof record === "object" ? record : {};
   return Object.freeze({
@@ -35,7 +42,7 @@ function normalizedSource(record, observedAt) {
     outcome: safeValue(source.outcome, EF302_ALLOWED_OUTCOMES, "unknown"),
     aggregate_count: nonNegativeInteger(source.aggregate_count),
     lifecycle_status: safeValue(source.lifecycle_status, EF302_ALLOWED_LIFECYCLE, "unknown"),
-    observed_at: typeof observedAt === "string" ? observedAt : null
+    observed_at: observedAt
   });
 }
 
@@ -45,8 +52,9 @@ function normalizedSource(record, observedAt) {
  */
 export function buildSanitizedSources(records, observedAt) {
   const input = records && typeof records === "object" ? records : {};
+  const timestamp = requireObservedAt(observedAt);
   return Object.freeze(Object.fromEntries(
-    REQUIRED_SOURCES.map((name) => [name, normalizedSource(input[name], observedAt)])
+    REQUIRED_SOURCES.map((name) => [name, normalizedSource(input[name], timestamp)])
   ));
 }
 
