@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EF-302 Sanitized Audit Attestation v1.3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "audit_window_utc",
+    "region",
+    "source_commit_sha",
+    "scope_manifest_digest",
+    "sources",
+    "conclusion"
+  ],
+  "properties": {
+    "schema_version": { "const": "ef302-sanitized-attestation-v1" },
+    "audit_window_utc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "const": "2026-10-13T03:30:00Z" },
+        "end": { "const": "2026-10-13T04:45:00Z" }
+      }
+    },
+    "region": { "const": "cn-wulanchabu" },
+    "source_commit_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "scope_manifest_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sts", "ecs_command", "target_instance", "model_studio", "billing"],
+      "properties": {
+        "sts": { "$ref": "#/$defs/source" },
+        "ecs_command": { "$ref": "#/$defs/source" },
+        "target_instance": { "$ref": "#/$defs/source" },
+        "model_studio": { "$ref": "#/$defs/source" },
+        "billing": { "$ref": "#/$defs/source" }
+      }
+    },
+    "conclusion": {
+      "type": "string",
+      "enum": ["no-evidence-found", "evidence-found", "unknown"]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "conclusion": {
+            "enum": ["no-evidence-found", "evidence-found"]
+          }
+        },
+        "required": ["conclusion"]
+      },
+      "then": {
+        "properties": {
+          "sources": {
+            "properties": {
+              "sts": { "$ref": "#/$defs/completeSource" },
+              "ecs_command": { "$ref": "#/$defs/completeSource" },
+              "target_instance": { "$ref": "#/$defs/completeSource" },
+              "model_studio": { "$ref": "#/$defs/completeSource" },
+              "billing": { "$ref": "#/$defs/completeSource" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "conclusion": { "const": "no-evidence-found" } },
+        "required": ["conclusion"]
+      },
+      "then": {
+        "properties": {
+          "sources": {
+            "properties": {
+              "sts": { "$ref": "#/$defs/completeAbsent" },
+              "ecs_command": { "$ref": "#/$defs/completeAbsent" },
+              "target_instance": { "$ref": "#/$defs/completeAbsent" },
+              "model_studio": { "$ref": "#/$defs/completeAbsent" },
+              "billing": { "$ref": "#/$defs/completeAbsent" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "conclusion": { "const": "evidence-found" } },
+        "required": ["conclusion"]
+      },
+      "then": {
+        "properties": {
+          "sources": {
+            "anyOf": [
+              { "properties": { "sts": { "$ref": "#/$defs/completePresent" } } },
+              { "properties": { "ecs_command": { "$ref": "#/$defs/completePresent" } } },
+              { "properties": { "target_instance": { "$ref": "#/$defs/completePresent" } } },
+              { "properties": { "model_studio": { "$ref": "#/$defs/completePresent" } } },
+              { "properties": { "billing": { "$ref": "#/$defs/completePresent" } } }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coverage", "outcome", "aggregate_count", "lifecycle_status", "observed_at"],
+      "properties": {
+        "coverage": {
+          "type": "string",
+          "enum": ["complete", "unavailable", "retention-gap", "unknown"]
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["present", "absent", "unknown"]
+        },
+        "aggregate_count": { "type": "integer", "minimum": 0 },
+        "lifecycle_status": {
+          "type": "string",
+          "enum": ["succeeded", "failed", "not-applicable", "unknown"]
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "completeSource": {
+      "allOf": [
+        { "$ref": "#/$defs/source" },
+        { "properties": { "coverage": { "const": "complete" } } }
+      ]
+    },
+    "completeAbsent": {
+      "allOf": [
+        { "$ref": "#/$defs/completeSource" },
+        { "properties": { "outcome": { "const": "absent" } } }
+      ]
+    },
+    "completePresent": {
+      "allOf": [
+        { "$ref": "#/$defs/completeSource" },
+        { "properties": { "outcome": { "const": "present" } } }
+      ]
+    }
+  }
+}
