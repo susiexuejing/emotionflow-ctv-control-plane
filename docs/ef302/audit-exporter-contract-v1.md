@@ -1,47 +1,57 @@
-# EF-302 Controlled Sanitized Audit Exporter — Contract v1.1
+# EF-302 Provider-Side Sanitized Audit — Contract v1.2
 
-**Status:** review-required and fail-closed. No cloud identity, policy, query, or audit run is permitted until an independent approval is recorded for this exact commit.
+**Status:** implementation-authorized by CEO; still fail-closed. This contract authorizes only the EF-302 historical audit.
 
-## Immutable audit scope
+## Immutable scope
 
-- Audit window: `2026-10-13T03:30:00Z` to `2026-10-13T04:45:00Z`
-- ECS region: `cn-wulanchabu`
-- Subject: the pre-existing EF-298 CTV invoker role and its temporary sessions only.
-- Target: the pre-approved DEV instance, represented here by the sealed deployment selector `EF302_TARGET_INSTANCE`.
-- Run limit: one successful start. Any second start must fail closed.
-- Lifetime: the audit identity must expire immediately after the run; no console login and no long-lived access key.
+- Audit window: `2026-10-13T03:30:00Z` to `2026-10-13T04:45:00Z`.
+- Region: `cn-wulanchabu`.
+- Subject: the pre-existing EF-298 CTV invoker role, its temporary sessions, the approved DEV instance, and the old run correlation only.
+- Runtime: one non-interactive provider-side sanitizer, maximum session/runtime **15 minutes**, one governed invocation, then immediate disablement.
+- The sealed target selector and actual cloud identifiers are deployment-only and must not enter this repository, logs, or attestations.
 
-The sealed selector is intentionally **not** stored in this public repository. At deployment, the operator must attest that it resolves to exactly the CEO-approved DEV instance and role. Its digest is recorded only in the sanitized attestation.
+## Provider-side boundary
 
-## Evidence acquisition rule
+A dedicated Function Compute sanitizer may read provider responses **only in transient Alibaba Cloud process memory**. It is the sole component permitted to see raw provider records. It must never persist, emit, log, cache, upload, or transmit them outside the Alibaba Cloud controlled boundary.
 
-This contract does **not** authorize direct provider APIs that can return raw events, command content, command output, prompts, responses, or billing line items.
+The Function Compute runtime must have:
+- Simple Log Service logging disabled;
+- no HTTP/public trigger, no event trigger, no retry, no Runner, and no caller-supplied input;
+- public Internet disabled; private service access only after a deployment preflight proves the required existing private endpoint path;
+- no VPC/product/database route except the approved private Alibaba Cloud service endpoint path;
+- no access key, secret input, instance metadata, or user/product data.
 
-A source can be queried only after a provider-side or separately approved redacting mechanism proves that the audit identity can receive *only* the schema-whitelisted fields. Until that proof exists for a source, the exporter must record `coverage=unavailable`, `outcome=unknown`, make no source query, and keep the overall conclusion `unknown`.
+If a private endpoint path or source-specific permission cannot be proven before deployment, that source is not queried and reports `coverage=unavailable`, `outcome=unknown`.
 
-No caller-supplied filters, regions, resources, command IDs, time windows, or output formats are accepted.
+## Sources and output
 
-## Network rule
+The sanitizer may emit only the fields defined in `sanitized-attestation-v1.schema.json`:
+- `present / absent / unknown`;
+- aggregate count;
+- lifecycle status;
+- observed time;
+- audit coverage status.
 
-Arbitrary internet egress is prohibited. A future approved redacting mechanism may use only the fixed Alibaba Cloud service endpoint(s) required for the fixed audit window and allowlist; it may not contact any other destination. This contract itself grants no endpoint access.
+It may not emit command content, instance details, raw output, API key, request ID, Prompt, Response, raw event, bill line, workspace, model, or user/product data.
 
-## Prohibited operations and data
+A source is enabled only when its adapter and redaction proof are listed in `provider-side-redaction-mechanism-v1.md`. Unsupported Model Studio audit-log or billing access remains `unknown`; it must not be replaced by console scraping, inference-log delivery, SLS, OSS, browser automation, or a broader read policy.
 
-No `RunCommand`, command creation/modification, dispatch, retry, Cloud Shell, terminal, file transfer, role assumption beyond the audit trust path, policy/configuration changes, token issuance, or workflow execution.
+## Non-negotiable exclusions
 
-It must not read secrets, instance metadata, host credentials, product data, databases, user data, raw provider events, command content, command output, prompts, responses, inference logs, or billing line items.
+No command execution, dispatch, retry, workflow run, OIDC issuance, BaiLian/model call, CTV execution, product access, database access, configuration mutation by the runtime, or use/alteration of `ef235_identity_write_probe_v1`.
 
-EF-301 remains blocked. EF-297, CTV execution, BaiLian/model invocation, and `ef235_identity_write_probe_v1` remain prohibited.
+EF-301 remains Blocked. EF-297 remains prohibited.
 
-## Data handling
+## Completion gate
 
-Only the schema-defined sanitized attestation may enter CTO Platform, GitHub, Jira, Confluence, or the audit report. No raw provider record may be logged, persisted, exported, or attached.
-
-A deployment is invalid unless it records:
+A run is valid only when it binds:
 - immutable source commit SHA;
-- reviewer identity and approval;
-- approved policy-diff digest;
+- independent review record for that SHA;
+- approved runtime-policy digest;
 - output-whitelist digest;
 - sealed-selector attestation;
-- provider-side redaction proof for every queried source;
-- identity disablement confirmation after the single run.
+- private-path and logging-disabled proof;
+- single-run record;
+- identity disablement confirmation.
+
+Any missing proof means no query and an overall `unknown` conclusion.
