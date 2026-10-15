@@ -68,7 +68,8 @@ export function assertSealedDeploymentEnvelope(envelope, { sourceCommitSha }) {
     throw new Error("EF-302 fail-closed: invalid provenance");
   }
 
-  assertNoUnexpectedFields(envelope);\n  requireExact(envelope.source_commit_sha, sourceCommitSha, "source commit mismatch");
+  assertNoUnexpectedFields(envelope);
+  requireExact(envelope.source_commit_sha, sourceCommitSha, "source commit mismatch");
   for (const key of REQUIRED_DIGESTS) requireDigest(envelope[key], key);
 
   requireExact(envelope.max_runtime_minutes, EF302_RUNTIME_LIMITS.maxRuntimeMinutes, "runtime limit");
