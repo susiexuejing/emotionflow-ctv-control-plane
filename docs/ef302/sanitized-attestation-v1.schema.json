@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "EF-302 Sanitized Audit Attestation v1.2",
+  "title": "EF-302 Sanitized Audit Attestation v1.3",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,8 +10,7 @@
     "source_commit_sha",
     "scope_manifest_digest",
     "sources",
-    "conclusion",
-    "identity_disabled"
+    "conclusion"
   ],
   "properties": {
     "schema_version": { "const": "ef302-sanitized-attestation-v1" },
@@ -48,8 +47,7 @@
     "conclusion": {
       "type": "string",
       "enum": ["no-evidence-found", "evidence-found", "unknown"]
-    },
-    "identity_disabled": { "const": true }
+    }
   },
   "allOf": [
     {
