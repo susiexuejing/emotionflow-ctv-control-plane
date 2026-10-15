@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "EF-302 Sanitized Audit Attestation v1.1",
+  "title": "EF-302 Sanitized Audit Attestation v1.2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -54,6 +54,29 @@
   "allOf": [
     {
       "if": {
+        "properties": {
+          "conclusion": {
+            "enum": ["no-evidence-found", "evidence-found"]
+          }
+        },
+        "required": ["conclusion"]
+      },
+      "then": {
+        "properties": {
+          "sources": {
+            "properties": {
+              "sts": { "$ref": "#/$defs/completeSource" },
+              "ecs_command": { "$ref": "#/$defs/completeSource" },
+              "target_instance": { "$ref": "#/$defs/completeSource" },
+              "model_studio": { "$ref": "#/$defs/completeSource" },
+              "billing": { "$ref": "#/$defs/completeSource" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
         "properties": { "conclusion": { "const": "no-evidence-found" } },
         "required": ["conclusion"]
       },
@@ -95,7 +118,7 @@
     "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["coverage", "outcome"],
+      "required": ["coverage", "outcome", "aggregate_count", "lifecycle_status", "observed_at"],
       "properties": {
         "coverage": {
           "type": "string",
@@ -104,29 +127,34 @@
         "outcome": {
           "type": "string",
           "enum": ["present", "absent", "unknown"]
+        },
+        "aggregate_count": { "type": "integer", "minimum": 0 },
+        "lifecycle_status": {
+          "type": "string",
+          "enum": ["succeeded", "failed", "not-applicable", "unknown"]
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     },
-    "completeAbsent": {
+    "completeSource": {
       "allOf": [
         { "$ref": "#/$defs/source" },
-        {
-          "properties": {
-            "coverage": { "const": "complete" },
-            "outcome": { "const": "absent" }
-          }
-        }
+        { "properties": { "coverage": { "const": "complete" } } }
+      ]
+    },
+    "completeAbsent": {
+      "allOf": [
+        { "$ref": "#/$defs/completeSource" },
+        { "properties": { "outcome": { "const": "absent" } } }
       ]
     },
     "completePresent": {
       "allOf": [
-        { "$ref": "#/$defs/source" },
-        {
-          "properties": {
-            "coverage": { "const": "complete" },
-            "outcome": { "const": "present" }
-          }
-        }
+        { "$ref": "#/$defs/completeSource" },
+        { "properties": { "outcome": { "const": "present" } } }
       ]
     }
   }
