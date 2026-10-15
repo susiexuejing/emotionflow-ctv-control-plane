@@ -1,27 +1,33 @@
-# EF-302 Provider-Side Sanitizer — Permission Difference v1.2
+# EF-302 Provider-Side Sanitizer — Permission Difference v1.3
 
-## Identities
+## Current decision: non-executable fail-closed baseline
+
+The reviewed public source contains no sealed runtime manifest, complete-collection adapter, or control-plane teardown adapter. Therefore no Function Compute service, runtime role, provisioner, trigger, or invocation may be created from this revision. It can produce only a schema-valid `unknown` attestation in an offline test; it cannot perform an EF-302 audit.
+
+A future executable package requires a new immutable source/artifact digest and a fresh independent review before any cloud identity or resource is considered.
+
+## Required future identities
 
 | Identity | Lifetime | Purpose |
 |---|---:|---|
-| `EmotionFlowEF302SanitizerRuntime` | One Function Compute execution, ≤15 minutes | Read raw control-plane responses only in provider-side memory; emit only the sanitized schema. |
-| `EmotionFlowEF302Provisioner` | Existing administrator session; removed from the path after setup | Create the one function, attach the runtime role, configure no-log/private-only settings, then disable the runtime identity after the run. |
+| `EmotionFlowEF302SanitizerRuntime` | One Function Compute execution, ≤15 minutes | May exist only after a reviewed package embeds sealed manifest, collection, and teardown adapters. |
+| `EmotionFlowEF302Provisioner` | Existing administrator session; removed from the path after setup | May exist only after the same gate; it performs the one setup/teardown sequence. |
 | CTO Platform | No new cloud read permissions | Receives only the sanitized attestation. |
 
 No RAM user, console login, long-lived AccessKey, OIDC token issuance, or public function trigger is granted to the runtime identity.
 
-## Runtime allowlist
+## Proposed runtime allowlist — not yet grantable
 
-The runtime policy contains only these source actions, each bounded in code to the fixed scope:
+If and only if the future package passes review, its runtime policy may contain only these source actions, each bounded in the package to the fixed scope:
 
 | Service | Allow | Rationale |
 |---|---|---|
 | ActionTrail | `actiontrail:LookupEvents` | Correlate OIDC role assumption and ECS control-plane event metadata. |
 | ECS Cloud Assistant | `ecs:DescribeInvocations`, `ecs:DescribeInvocationResults` | Determine whether a correlated invocation exists and its lifecycle only. Raw fields remain transient inside the sanitizer. |
 
-`actiontrail:LookupEvents` cannot be resource-scoped by RAM, so the fixed time, role/session, and event allowlist are enforced in the immutable sanitizer code. No direct CTO Platform access is permitted.
+`actiontrail:LookupEvents` cannot be resource-scoped by RAM. A future immutable package must bind fixed time, role/session, target instance, old-run selector, and event allowlist before any query. The public baseline provides none of those executable adapters.
 
-## Explicitly not granted
+## Explicitly never granted
 
 - Any ECS write, command, terminal, upload, file transfer, reboot, deployment, retry, or `RunCommand`.
 - `ecs:DescribeCommands` (unnecessary and may expose command content).
@@ -30,18 +36,16 @@ The runtime policy contains only these source actions, each bounded in code to t
 - RAM/IAM/STS mutation, key management, secret access, instance metadata, databases, VPC resources, NAT, PrivateLink creation, OSS, SLS, outbound public Internet, or product APIs.
 - `fc:InvokeFunction` for CTO Platform, any HTTP trigger, timer/event trigger, retry, or async destination.
 
-Model Studio audit logs and precise bill records have no currently approved narrow machine interface in this contract. They are deliberately reported as `unavailable/unknown`, not accessed through a broad console or system read policy.
+Model Studio audit logs and precise bill records have no currently approved narrow machine interface in this contract. They are permanently reported as `unavailable/unknown`, not accessed through a broad console or system read policy.
 
-## Provisioning and rollback
+## Future provisioning and rollback gate
 
-The Provisioner may perform the one approved setup and teardown only:
+Only a separately reviewed executable package may allow the Provisioner to:
 1. create the isolated Function Compute function and runtime role;
-2. attach this exact runtime policy;
+2. attach the exact reviewed runtime policy;
 3. set logging disabled, no public Internet, no trigger, and runtime timeout ≤15 minutes;
 4. verify the private provider-endpoint path without invoking the audit;
 5. perform one governed invocation;
-6. immediately disable/delete the runtime role/function and revoke the attachment.
+6. immediately disable/delete the runtime role/function and independently verify both control-plane states.
 
 If any step would require creating VPC, NAT, PrivateLink, logging, object storage, or a broader policy, stop before that step. Report `unknown`.
-
-The post-run record retains only source SHA, policy digest, whitelist digest, coverage/outcome/count/status/time fields, and disablement confirmation.
