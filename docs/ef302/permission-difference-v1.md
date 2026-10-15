@@ -1,47 +1,47 @@
-# EF-302 Audit Exporter — Permission Difference v1.1
+# EF-302 Provider-Side Sanitizer — Permission Difference v1.2
 
-**Purpose:** establish only a future-safe boundary for historical evidence. It never operates the DEV instance.
+## Identities
 
-## Identity and trust
+| Identity | Lifetime | Purpose |
+|---|---:|---|
+| `EmotionFlowEF302SanitizerRuntime` | One Function Compute execution, ≤15 minutes | Read raw control-plane responses only in provider-side memory; emit only the sanitized schema. |
+| `EmotionFlowEF302Provisioner` | Existing administrator session; removed from the path after setup | Create the one function, attach the runtime role, configure no-log/private-only settings, then disable the runtime identity after the run. |
+| CTO Platform | No new cloud read permissions | Receives only the sanitized attestation. |
 
-Proposed separate non-interactive identity: `EmotionFlowEF302AuditReader`.
+No RAM user, console login, long-lived AccessKey, OIDC token issuance, or public function trigger is granted to the runtime identity.
 
-- Trust: only the approved Central CTO Platform workload identity; no console sign-in, RAM user, main-account principal, interactive federation, or access key.
-- Session: one use, time-bound to the audit run, then explicitly disabled/deleted.
-- Scope binding: deployment must bind the exact sealed approved role and target instance. This public file contains no cloud account, instance, network, secret, or product identifier.
+## Runtime allowlist
 
-## Current direct cloud permission delta: none
+The runtime policy contains only these source actions, each bounded in code to the fixed scope:
 
-No direct ActionTrail, ECS Cloud Assistant, Model Studio, BSS, SLS, or other provider read permission may be attached to `EmotionFlowEF302AuditReader` in this version.
+| Service | Allow | Rationale |
+|---|---|---|
+| ActionTrail | `actiontrail:LookupEvents` | Correlate OIDC role assumption and ECS control-plane event metadata. |
+| ECS Cloud Assistant | `ecs:DescribeInvocations`, `ecs:DescribeInvocationResults` | Determine whether a correlated invocation exists and its lifecycle only. Raw fields remain transient inside the sanitizer. |
 
-The previously considered ECS APIs are explicitly rejected: their responses can contain command content or command output, which this audit identity is forbidden to read. Direct ActionTrail and billing reads are also rejected because their returned records are broader than the approved output whitelist.
+`actiontrail:LookupEvents` cannot be resource-scoped by RAM, so the fixed time, role/session, and event allowlist are enforced in the immutable sanitizer code. No direct CTO Platform access is permitted.
 
-## Future source enablement gate
+## Explicitly not granted
 
-A source may be enabled only by a separately reviewed provider-side redacting mechanism that proves all of the following before any identity/policy attachment:
+- Any ECS write, command, terminal, upload, file transfer, reboot, deployment, retry, or `RunCommand`.
+- `ecs:DescribeCommands` (unnecessary and may expose command content).
+- Model Studio/BaiLian audit, inference, workspace, API key, data, SLS, or inference-log permission.
+- BSS/Model Studio billing read, download, or export permission.
+- RAM/IAM/STS mutation, key management, secret access, instance metadata, databases, VPC resources, NAT, PrivateLink creation, OSS, SLS, outbound public Internet, or product APIs.
+- `fc:InvokeFunction` for CTO Platform, any HTTP trigger, timer/event trigger, retry, or async destination.
 
-1. It accepts only the fixed time window, region, sealed target, and role/session correlation.
-2. It exposes only the fields defined in `sanitized-attestation-v1.schema.json`.
-3. It never returns raw event bodies, request parameters, command content/output, prompts/responses, API-key/workspace data, or billing line items to the audit identity.
-4. It permits only fixed Alibaba Cloud service endpoints and rejects all arbitrary internet egress.
-5. It can be disabled immediately after one run.
+Model Studio audit logs and precise bill records have no currently approved narrow machine interface in this contract. They are deliberately reported as `unavailable/unknown`, not accessed through a broad console or system read policy.
 
-Without that proof, the source remains `unavailable`, no query is made, and the audit conclusion remains `unknown`.
+## Provisioning and rollback
 
-## Explicit denies
+The Provisioner may perform the one approved setup and teardown only:
+1. create the isolated Function Compute function and runtime role;
+2. attach this exact runtime policy;
+3. set logging disabled, no public Internet, no trigger, and runtime timeout ≤15 minutes;
+4. verify the private provider-endpoint path without invoking the audit;
+5. perform one governed invocation;
+6. immediately disable/delete the runtime role/function and revoke the attachment.
 
-- All execution and mutation APIs: commands, command lifecycle mutation, terminal, file transfer, reboot, deploy, retry, Cloud Shell, workflow dispatch, and configuration changes.
-- All STS role assumption except the preconfigured audit trust path.
-- IAM/RAM/OIDC policy, role, provider, access-key, console-login, or trust mutations.
-- Secret managers, KMS decrypt, ECS instance metadata, host credentials, databases, volumes, product APIs, user data, and arbitrary internet access.
-- BaiLian/Model Studio inference, API-key, data-space, workspace, file, batch, log-delivery, inference-log, prompt, and response access.
-- Billing detail/download/export, invoice, subscription, payment, and all global billing views.
-- Logging, artifact persistence, or export of any provider record.
+If any step would require creating VPC, NAT, PrivateLink, logging, object storage, or a broader policy, stop before that step. Report `unknown`.
 
-## Rollback
-
-1. Terminate the exporter after its first attestation.
-2. Disable/delete `EmotionFlowEF302AuditReader` and remove its trust relationship.
-3. Revoke only the separately approved redacting-mechanism policy attachment, if one exists.
-4. Preserve only the sanitized attestation, source SHA, policy-diff digest, review record, and disablement result.
-5. If any source cannot be bounded to this contract, abort before querying and report `unknown`.
+The post-run record retains only source SHA, policy digest, whitelist digest, coverage/outcome/count/status/time fields, and disablement confirmation.
